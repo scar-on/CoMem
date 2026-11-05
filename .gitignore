@@ -1,0 +1,29 @@
+# 忽略所有 __pycache__ 文件夹
+__pycache__/
+*.pyc
+en_core_web_sm-2.2.5.tar.gz
+
+# 忽略体积过大的目录
+save_dir/
+evaluation/evaluation_data/
+example/
+
+# 日志文件
+*.log
+
+# Local experiment outputs and generated artifacts
+logs/
+save_dir/
+mem_tsne/out/
+mem_tsne/out_stage2/
+mem_context_tsne/out/
+evaluation/evaluation_data/
+ruler/data/
+ruler/predictions-clara-ruler/
+ruler/contrast_method/ruler/results/
+*.npy
+*.npz
+*.jsonl
+*.png
+*.pdf
+*.ipynb
