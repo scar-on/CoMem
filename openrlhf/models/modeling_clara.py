@@ -1122,8 +1122,29 @@ class CLaRa(PreTrainedModel):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: str, *args, **kwargs):
         """Load model from pretrained checkpoint."""
+        checkpoint_subfolder = kwargs.pop("subfolder", None)
+
+        def checkpoint_file(filename: str) -> str:
+            """Resolve a checkpoint file locally or from a Hub subfolder."""
+            if checkpoint_subfolder:
+                local_path = os.path.join(
+                    pretrained_model_name_or_path, checkpoint_subfolder, filename
+                )
+            else:
+                local_path = os.path.join(pretrained_model_name_or_path, filename)
+            try:
+                return hf_hub_download(
+                    repo_id=pretrained_model_name_or_path,
+                    filename=filename,
+                    subfolder=checkpoint_subfolder,
+                )
+            except Exception:
+                return local_path
+
         # Load configuration
-        config = CLaRaConfig.from_pretrained(pretrained_model_name_or_path)
+        config = CLaRaConfig.from_pretrained(
+            pretrained_model_name_or_path, subfolder=checkpoint_subfolder
+        )
         
         # Update config with kwargs
         for key, value in kwargs.items():
@@ -1144,15 +1165,7 @@ class CLaRa(PreTrainedModel):
             model = cls(config)
 
             # Load first and last layers
-            try:
-                first_and_last_layers_path = hf_hub_download(
-                    repo_id=pretrained_model_name_or_path, 
-                    filename="decoder_first_last_layers.pth"
-                )
-            except Exception:
-                first_and_last_layers_path = os.path.join(
-                    pretrained_model_name_or_path, "decoder_first_last_layers.pth"
-                )
+            first_and_last_layers_path = checkpoint_file("decoder_first_last_layers.pth")
 
             if os.path.exists(first_and_last_layers_path):
                 first_and_last_decoder_state_dict = torch.load(
@@ -1167,13 +1180,7 @@ class CLaRa(PreTrainedModel):
             peft_config = model._get_peft_config(lora_r=config.lora_r)
             
             # Load LoRA adapters
-            try:
-                adapters_path = hf_hub_download(
-                    repo_id=pretrained_model_name_or_path, 
-                    filename="adapters.pth"
-                )
-            except Exception:
-                adapters_path = os.path.join(pretrained_model_name_or_path, "adapters.pth")
+            adapters_path = checkpoint_file("adapters.pth")
     
             if os.path.exists(adapters_path):
                 adapters_state_dict = torch.load(adapters_path, map_location=map_location, weights_only=True)
@@ -1192,13 +1199,7 @@ class CLaRa(PreTrainedModel):
                     and getattr(model, 'use_proj_head', False)
                     and hasattr(model, 'proj_head')
                     and not getattr(config, 'pure_inference', False)):
-                try:
-                    proj_heads_path = hf_hub_download(
-                        repo_id=pretrained_model_name_or_path,
-                        filename="proj_heads.pth"
-                    )
-                except Exception:
-                    proj_heads_path = os.path.join(pretrained_model_name_or_path, "proj_heads.pth")
+                proj_heads_path = checkpoint_file("proj_heads.pth")
 
                 if os.path.exists(proj_heads_path):
                     proj_heads_state = torch.load(

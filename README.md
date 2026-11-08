@@ -14,6 +14,14 @@ The public Hugging Face model entry point is `modeling_comem.CoMem`. The
 underlying `modeling_clara.py` module is retained so older checkpoints and
 training scripts remain compatible.
 
+For a checkpoint stored in a Hugging Face subdirectory, pass its subfolder:
+
+```python
+model = CoMem.from_pretrained(
+    "ssxada/CoMem-Mistral-7B", subfolder="stage1/cr4"
+)
+```
+
 ## Setup
 
 ```bash
