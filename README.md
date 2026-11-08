@@ -10,6 +10,10 @@ context compression experiments with CLaRa-style memory tokens.
 - `scripts/`: training and evaluation entry points.
 - `llm_judge/`: optional LLM-as-a-judge utilities.
 
+The public Hugging Face model entry point is `modeling_comem.CoMem`. The
+underlying `modeling_clara.py` module is retained so older checkpoints and
+training scripts remain compatible.
+
 ## Setup
 
 ```bash

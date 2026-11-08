@@ -27,3 +27,4 @@ ruler/contrast_method/ruler/results/
 *.png
 *.pdf
 *.ipynb
+token.text
