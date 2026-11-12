@@ -5,9 +5,9 @@
 #
 
 """
-CLaRa SFT Trainer
+CoMem SFT Trainer
 
-This module provides the supervised fine-tuning trainer for CLaRa models.
+This module provides the supervised fine-tuning trainer for CoMem models.
 """
 
 import os
@@ -106,9 +106,9 @@ class EvaluationMetrics:
 
 class SFTTrainer(ABC):
     """
-    Trainer for CLaRa supervised fine-tuning (SFT).
+    Trainer for CoMem supervised fine-tuning (SFT).
 
-    This trainer handles stage1 training for CLaRa models.
+    This trainer handles stage1 training for CoMem models.
     """
 
     def __init__(self,
@@ -129,7 +129,7 @@ class SFTTrainer(ABC):
         Initialize the SFT trainer.
         
         Args:
-            model: CLaRa model to train
+            model: CoMem model to train
             strategy: Training strategy (distributed, etc.)
             optim: Optimizer for training
             train_dataloader: Training data loader

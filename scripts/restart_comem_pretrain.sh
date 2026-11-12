@@ -1,6 +1,6 @@
 #!/bin/bash
-# CLaRa stage1 预训练重启脚本（与之前停掉的任务参数一致）
-# 使用方式: conda activate compress && bash scripts/restart_clara_pretrain.sh
+# CoMem stage1 预训练重启脚本（与之前停掉的任务参数一致）
+# 使用方式: conda activate compress && bash scripts/restart_comem_pretrain.sh
 # 说明: 因中断时未保存 checkpoint，本次启动将从 --pretrain 从头训练
 
 set -e

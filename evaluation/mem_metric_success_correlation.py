@@ -125,7 +125,7 @@ def attach_success_metrics(mem_rows: List[Dict], datasets: List[str]) -> List[Di
         answer = pred_row.get("answer") or pred_row.get("golden_answers")
         if isinstance(answer, list):
             answer = answer[0]
-        prediction = pred_row.get("CLaRa_normal_output", "")
+        prediction = pred_row.get("CoMem_normal_output", "")
 
         out = dict(row)
         out["prediction"] = prediction

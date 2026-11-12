@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from openrlhf.models.modeling_clara import CLaRa  # noqa: E402
+from openrlhf.models.modeling_comem import CoMem  # noqa: E402
 
 
 DEFAULT_DATA_ROOT = REPO_ROOT / "evaluation" / "evaluation_data" / "end_to_end_evaluation"
@@ -144,7 +144,7 @@ def intra_mem_statistics(mem: torch.Tensor) -> Dict:
     }
 
 
-def query_embedding(model: CLaRa, question: str, device: torch.device) -> torch.Tensor:
+def query_embedding(model: CoMem, question: str, device: torch.device) -> torch.Tensor:
     tokenizer = model.decoder_tokenizer
     encoded = tokenizer(
         question,
@@ -216,7 +216,7 @@ def evaluate_model(
 ) -> List[Dict]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Loading {model_name} from {model_path} as {training_stage} on {device}")
-    model = CLaRa.from_pretrained(
+    model = CoMem.from_pretrained(
         model_path,
         training_stage=training_stage,
         generation_top_k=args.generation_top_k,
@@ -588,7 +588,7 @@ def plot_intra_mem(records: List[Dict], rows: List[Dict], output_dir: str) -> No
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Evaluate information carried by CLaRa memory embeddings."
+        description="Evaluate information carried by CoMem memory embeddings."
     )
     parser.add_argument(
         "--model",

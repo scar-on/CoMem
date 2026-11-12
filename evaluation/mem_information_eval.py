@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from openrlhf.models.modeling_clara import CLaRa
+from openrlhf.models.modeling_comem import CoMem
 
 
 DATA_ROOT = os.environ.get(
@@ -131,7 +131,7 @@ def intra_mem_statistics(mem: torch.Tensor) -> Dict:
     }
 
 
-def query_embedding(model: CLaRa, question: str, device: torch.device) -> torch.Tensor:
+def query_embedding(model: CoMem, question: str, device: torch.device) -> torch.Tensor:
     tokenizer = model.decoder_tokenizer
     encoded = tokenizer(
         question,
@@ -201,7 +201,7 @@ def evaluate_model(
 ) -> List[Dict]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Loading {model_name} from {model_path} on {device}")
-    model = CLaRa.from_pretrained(
+    model = CoMem.from_pretrained(
         model_path,
         training_stage="stage1",
         generation_top_k=args.generation_top_k,
@@ -540,7 +540,7 @@ def plot_intra_mem(records: List[Dict], rows: List[Dict], output_dir: str) -> No
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Evaluate information carried by CLaRa memory embeddings."
+        description="Evaluate information carried by CoMem memory embeddings."
     )
     parser.add_argument(
         "--model",

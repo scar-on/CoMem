@@ -26,7 +26,7 @@ from direct_eval_5docs import (
     f1_score,
     normalize_answer,
 )
-from openrlhf.models.modeling_clara import CLaRa
+from openrlhf.models.modeling_comem import CoMem
 
 
 os.environ["NCCL_TIMEOUT"] = "5400"
@@ -81,7 +81,7 @@ def calculate_metrics(result_list: List[Dict]) -> Dict[str, float]:
 
     answer_key = "golden_answers" if "golden_answers" in result_list[0] else "answer"
     for result in result_list:
-        prediction = result["CLaRa_normal_output"]
+        prediction = result["CoMem_normal_output"]
         ground_truth = result[answer_key][0] if answer_key == "golden_answers" else result[answer_key]
 
         f1_total += f1_score(prediction, ground_truth)
@@ -98,7 +98,7 @@ def calculate_metrics(result_list: List[Dict]) -> Dict[str, float]:
     }
 
 
-def generate_batch(model: CLaRa, batch: List[Dict], args: argparse.Namespace) -> List[Dict]:
+def generate_batch(model: CoMem, batch: List[Dict], args: argparse.Namespace) -> List[Dict]:
     tokenizer = model.decoder_tokenizer
     prompts = [
         build_raw_context_prompt(model, item["question"], item["documents"])
@@ -135,7 +135,7 @@ def generate_batch(model: CLaRa, batch: List[Dict], args: argparse.Namespace) ->
     for item, prediction, prompt_tokens in zip(batch, predictions, attention_mask.sum(dim=1).tolist()):
         result_item = item["original_data"].copy()
         result_item["docs"] = item["documents"]
-        result_item["CLaRa_normal_output"] = prediction.strip()
+        result_item["CoMem_normal_output"] = prediction.strip()
         result_item["mode"] = "raw_context_no_compression"
         result_item["prompt_tokens"] = int(prompt_tokens)
         result_item["adapter_mode"] = args.adapter_mode
@@ -152,9 +152,9 @@ def run_dataset(dataset: str, args: argparse.Namespace) -> None:
     processed_data = load_eval_data(dataset, args.gold_retrieval, args.generation_top_k)
     if accelerator.is_main_process:
         print(f"Loaded {len(processed_data)} samples for {dataset}")
-        print("Loading CLaRa decoder for raw-context evaluation...")
+        print("Loading CoMem decoder for raw-context evaluation...")
 
-    model = CLaRa.from_pretrained(
+    model = CoMem.from_pretrained(
         args.model_path,
         training_stage=args.stage,
         generation_top_k=args.generation_top_k,
@@ -233,7 +233,7 @@ def run_dataset(dataset: str, args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Evaluate raw 5-document context baseline without CLaRa compression."
+        description="Evaluate raw 5-document context baseline without CoMem compression."
     )
     parser.add_argument("--model_path", type=str, required=True, help="Path to model checkpoint")
     parser.add_argument("--stage", type=str, default="stage1", choices=["stage1", "stage1_2"])

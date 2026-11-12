@@ -1,9 +1,15 @@
+import argparse
+
 from datasets import load_dataset
 import pprint
 
+parser = argparse.ArgumentParser(description="Inspect a parquet dataset example.")
+parser.add_argument("parquet_file", help="Path to a parquet dataset shard")
+args = parser.parse_args()
+
 dataset = load_dataset(
     "parquet",
-    data_files="/data/project/scar/CLaRa_pretraining/train-00000-of-00021-07780a8f8e707c96.parquet",
+    data_files=args.parquet_file,
     split="train"
 )
 

@@ -30,16 +30,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from openrlhf.models.modeling_clara import CLaRa  # noqa: E402
+from openrlhf.models.modeling_comem import CoMem  # noqa: E402
 
-
-DEFAULT_MODELS = {
-    4: "/user/zhangsikui/a_qcc/save_dir/stage2_clara_inst_simcse_0.01_cr4",
-    8: "/user/zhangsikui/a_qcc/save_dir/stage2_clara_inst_simcse_0.01_cr8",
-    16: "/user/zhangsikui/a_qcc/save_dir/stage2_clara_inst_simcse_0.01_cr16",
-    32: "/user/zhangsikui/a_qcc/save_dir/stage2_clara_inst_lr1e-4",
-    64: "/user/zhangsikui/a_qcc/save_dir/stage2_clara_inst_simcse_0.01_cr64",
-}
 
 SYSTEM_PROMPT = (
     "You are a helpful assistant. Your task is to extract relevant "
@@ -50,6 +42,7 @@ SYSTEM_PROMPT = (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build online/offline efficiency tables.")
     parser.add_argument("--gpu", default="2")
+    parser.add_argument("--models", required=True, help="Comma-separated CR=checkpoint_path entries")
     parser.add_argument("--dataset", default="nq")
     parser.add_argument("--batch_size", type=int, default=64)
     parser.add_argument("--offline_batch_size", type=int, default=None)
@@ -62,8 +55,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top_k", type=int, default=5)
     parser.add_argument("--max_new_tokens", type=int, default=32)
     parser.add_argument("--attn_implementation", default="flash_attention_2")
-    parser.add_argument("--baseline_model_path", default="/user/zhangsikui/a_qcc/data/model/Qwen_Qwen3-4B-Instruct-2507")
-    parser.add_argument("--output_dir", default="/user/zhangsikui/a_qcc/save_dir/online_offline_efficiency")
+    parser.add_argument("--baseline_model_path", default=os.environ.get("BASELINE_MODEL_PATH", "Qwen/Qwen3-4B-Instruct-2507"))
+    parser.add_argument("--output_dir", default=str(REPO_ROOT / "save_dir" / "online_offline_efficiency"))
     return parser.parse_args()
 
 
@@ -110,8 +103,12 @@ def load_rows(dataset: str, top_k: int, limit: int) -> List[Dict]:
     return rows
 
 
-def parse_models() -> Dict[int, str]:
-    return dict(DEFAULT_MODELS)
+def parse_models(models_arg: str) -> Dict[int, str]:
+    models = {}
+    for entry in models_arg.split(","):
+        rate, path = entry.split("=", 1)
+        models[int(rate.strip().lower().removeprefix("cr"))] = path.strip()
+    return dict(sorted(models.items()))
 
 
 def set_attention_backend(model, attn_implementation: str) -> None:
@@ -121,8 +118,8 @@ def set_attention_backend(model, attn_implementation: str) -> None:
         model.config.attn_implementation = attn_implementation
 
 
-def load_clara(model_path: str, top_k: int, attn_implementation: str) -> CLaRa:
-    model = CLaRa.from_pretrained(
+def load_comem(model_path: str, top_k: int, attn_implementation: str) -> CoMem:
+    model = CoMem.from_pretrained(
         model_path,
         training_stage="stage1_2",
         generation_top_k=top_k,
@@ -157,7 +154,7 @@ def load_baseline(model_path: str, attn_implementation: str):
     return tokenizer, model
 
 
-def causal_compress_documents(model: CLaRa, enc_input_ids: torch.Tensor, enc_attention_mask: torch.Tensor) -> torch.Tensor:
+def causal_compress_documents(model: CoMem, enc_input_ids: torch.Tensor, enc_attention_mask: torch.Tensor) -> torch.Tensor:
     if "encoder_adapter" in model.adapter_keys:
         model._set_active_adapters("encoder_adapter")
     else:
@@ -190,7 +187,7 @@ def build_baseline_prompt(tokenizer, documents: List[str], question: str) -> str
         )
 
 
-def prepare_clara_inputs(model: CLaRa, rows: List[Dict]):
+def prepare_comem_inputs(model: CoMem, rows: List[Dict]):
     flat_docs = []
     flat_queries = []
     for row in rows:
@@ -207,7 +204,7 @@ def prepare_clara_inputs(model: CLaRa, rows: List[Dict]):
     )
 
 
-def decode_from_compressed(model: CLaRa, rows: List[Dict], compressed_documents: torch.Tensor, max_new_tokens: int):
+def decode_from_compressed(model: CoMem, rows: List[Dict], compressed_documents: torch.Tensor, max_new_tokens: int):
     questions = [row["question"] for row in rows]
     model.generation_top_k = compressed_documents.size(0) // len(questions)
     instructions = [model._blend_prompt_and_memory_tokens(query=q, stage="stage1_2") for q in questions]
@@ -234,9 +231,9 @@ def decode_from_compressed(model: CLaRa, rows: List[Dict], compressed_documents:
 
 
 @torch.no_grad()
-def run_clara_once(model: CLaRa, rows: List[Dict], max_new_tokens: int, mode: str, cached=None):
+def run_comem_once(model: CoMem, rows: List[Dict], max_new_tokens: int, mode: str, cached=None):
     if mode == "online":
-        enc_input_ids, enc_attention_mask = prepare_clara_inputs(model, rows)
+        enc_input_ids, enc_attention_mask = prepare_comem_inputs(model, rows)
         compressed, compress_s = timed_cuda_call(
             lambda: causal_compress_documents(model, enc_input_ids, enc_attention_mask)
         )
@@ -252,23 +249,23 @@ def run_clara_once(model: CLaRa, rows: List[Dict], max_new_tokens: int, mode: st
 
 
 @torch.no_grad()
-def make_offline_cache(model: CLaRa, rows: List[Dict]) -> torch.Tensor:
-    enc_input_ids, enc_attention_mask = prepare_clara_inputs(model, rows)
+def make_offline_cache(model: CoMem, rows: List[Dict]) -> torch.Tensor:
+    enc_input_ids, enc_attention_mask = prepare_comem_inputs(model, rows)
     compressed = causal_compress_documents(model, enc_input_ids, enc_attention_mask)
     del enc_input_ids, enc_attention_mask
     sync_cuda()
     return compressed.detach()
 
 
-def benchmark_clara(model: CLaRa, rows: List[Dict], args: argparse.Namespace, mode: str) -> Dict:
+def benchmark_comem(model: CoMem, rows: List[Dict], args: argparse.Namespace, mode: str) -> Dict:
     timed_start = max(0, args.repeat_runs - args.timed_runs)
     total_s = 0.0
     comp_s = 0.0
     dec_s = 0.0
     samples = 0
     cached = make_offline_cache(model, rows) if mode == "offline" else None
-    for repeat_idx in tqdm(range(args.repeat_runs), desc=f"CLaRa {mode}", leave=False):
-        elapsed, comp, dec = run_clara_once(model, rows, args.max_new_tokens, mode, cached)
+    for repeat_idx in tqdm(range(args.repeat_runs), desc=f"CoMem {mode}", leave=False):
+        elapsed, comp, dec = run_comem_once(model, rows, args.max_new_tokens, mode, cached)
         if repeat_idx >= timed_start:
             total_s += elapsed
             comp_s += comp
@@ -356,7 +353,7 @@ def benchmark_baseline_chunked(tokenizer, model, rows: List[Dict], args: argpars
     }
 
 
-def benchmark_clara_offline_chunked(model: CLaRa, rows: List[Dict], args: argparse.Namespace, batch_size: int) -> Dict:
+def benchmark_comem_offline_chunked(model: CoMem, rows: List[Dict], args: argparse.Namespace, batch_size: int) -> Dict:
     timed_start = max(0, args.repeat_runs - args.timed_runs)
     total_s = 0.0
     samples = 0
@@ -369,7 +366,7 @@ def benchmark_clara_offline_chunked(model: CLaRa, rows: List[Dict], args: argpar
         cache_by_index.append((batch, torch.cat(compressed_chunks, dim=0)))
         del compressed_chunks
     try:
-        for repeat_idx in tqdm(range(args.repeat_runs), desc="CLaRa offline", leave=False):
+        for repeat_idx in tqdm(range(args.repeat_runs), desc="CoMem offline", leave=False):
             for batch, compressed in cache_by_index:
                 _, elapsed = timed_cuda_call(lambda b=batch, c=compressed: decode_from_compressed(model, b, c, args.max_new_tokens))
                 if repeat_idx >= timed_start:
@@ -415,7 +412,7 @@ def qwen4b_flops_baseline(args: argparse.Namespace) -> float:
     )
 
 
-def qwen4b_flops_clara(args: argparse.Namespace, cr: int, mode: str) -> float:
+def qwen4b_flops_comem(args: argparse.Namespace, cr: int, mode: str) -> float:
     layers, hidden, intermediate, kv_hidden = 36, 2560, 9728, 8 * 128
     mem = args.doc_tokens // cr
     decoder_context = args.query_tokens + args.top_k * mem
@@ -489,23 +486,23 @@ def main() -> None:
     torch.cuda.empty_cache()
     gc.collect()
 
-    for cr, model_path in parse_models().items():
+    for cr, model_path in parse_models(args.models).items():
         print(f"\nLoading CR{cr}: {model_path}")
-        model = load_clara(model_path, args.top_k, args.attn_implementation)
+        model = load_comem(model_path, args.top_k, args.attn_implementation)
         for mode in ("online", "offline"):
             if args.offline_only and mode == "online":
                 continue
             metrics = (
-                benchmark_clara_offline_chunked(model, rows, args, offline_batch_size)
+                benchmark_comem_offline_chunked(model, rows, args, offline_batch_size)
                 if args.offline_only
-                else benchmark_clara(model, rows, args, mode)
+                else benchmark_comem(model, rows, args, mode)
             )
             records.append(
                 {
                     "setting": mode,
-                    "model": "CLaRa-Qwen3-4B",
+                    "model": "CoMem-Qwen3-4B",
                     "compression_rate": cr,
-                    "gflops": qwen4b_flops_clara(args, cr, mode) / 1e9,
+                    "gflops": qwen4b_flops_comem(args, cr, mode) / 1e9,
                     "time_s": metrics["seconds_per_sample"],
                     "samples_per_second": metrics["samples_per_second"],
                     "batch_size": len(rows),

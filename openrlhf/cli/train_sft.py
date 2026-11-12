@@ -5,9 +5,9 @@
 #
 
 """
-CLaRa Training Script
+CoMem Training Script
 
-This script handles training of the CLaRa model for stage1-only training.
+This script handles training of the CoMem model for stage1-only training.
 """
 
 import argparse
@@ -22,7 +22,7 @@ from openrlhf.datasets import SFTDataset, ContrastSFTDataset
 from openrlhf.datasets.utils import blending_datasets
 from openrlhf.trainer.sft_trainer import SFTTrainer
 from openrlhf.utils import get_strategy, get_tokenizer
-from openrlhf.models.modeling_clara import CLaRaConfig, CLaRa
+from openrlhf.models.modeling_comem import CoMemConfig, CoMem
 from openrlhf.datasets.sft_dataset import make_collate_fn
 from openrlhf.utils.distributed_sampler import ContrastDistributedSampler
 
@@ -40,9 +40,9 @@ def str2bool(value):
     raise argparse.ArgumentTypeError(f"Boolean value expected, got: {value}")
 
 
-def create_clara_config(args: argparse.Namespace) -> CLaRaConfig:
-    """Create CLaRa configuration from command line arguments."""
-    return CLaRaConfig(
+def create_comem_config(args: argparse.Namespace) -> CoMemConfig:
+    """Create CoMem configuration from command line arguments."""
+    return CoMemConfig(
         decoder_model_name=args.pretrain,
         compr_rate=args.compress_rate,
         doc_max_length=args.doc_max_length,
@@ -75,13 +75,13 @@ def create_clara_config(args: argparse.Namespace) -> CLaRaConfig:
     )
 
 
-def setup_model(args: argparse.Namespace) -> CLaRa:
-    """Setup CLaRa model from arguments."""
-    cfg = create_clara_config(args)
-    
+def setup_model(args: argparse.Namespace) -> CoMem:
+    """Setup CoMem model from arguments."""
+    cfg = create_comem_config(args)
+
     if args.pretrain_checkpoint is not None:
         print(f"Loading model from checkpoint: {args.pretrain_checkpoint}")
-        model = CLaRa.from_pretrained(
+        model = CoMem.from_pretrained(
             args.pretrain_checkpoint,
             training_stage=args.stage,
             generation_top_k=args.generation_top_k,
@@ -99,12 +99,12 @@ def setup_model(args: argparse.Namespace) -> CLaRa:
         )
     else:
         print("Initializing new model")
-        model = CLaRa(cfg)
-    
+        model = CoMem(cfg)
+
     return model
 
 
-def setup_datasets(args: argparse.Namespace, tokenizer, strategy, model: CLaRa):
+def setup_datasets(args: argparse.Namespace, tokenizer, strategy, model: CoMem):
     """Setup training and evaluation datasets."""
     simcse_in_batch = getattr(args, 'simcse_in_batch', False)
     contrast_num_questions = getattr(args, 'contrast_num_questions', 8)
@@ -191,23 +191,23 @@ def setup_datasets(args: argparse.Namespace, tokenizer, strategy, model: CLaRa):
             True,
             False,
             collate_fn=make_collate_fn(
-                model, 
-                qa_loss=args.qa_loss, 
-                dec_max_len=args.max_len, 
+                model,
+                qa_loss=args.qa_loss,
+                dec_max_len=args.max_len,
                 enc_max_len=args.doc_max_length
             ),
         )
-    
+
     return train_dataset, train_dataloader, eval_dataloader
 
 
-def setup_training_components(args: argparse.Namespace, model: CLaRa, train_dataset, strategy):
+def setup_training_components(args: argparse.Namespace, model: CoMem, train_dataset, strategy):
     """Setup optimizer, scheduler and other training components."""
     # Configure optimizer
     optimizer = strategy.create_optimizer(
-        model, 
-        lr=args.learning_rate, 
-        betas=args.adam_betas, 
+        model,
+        lr=args.learning_rate,
+        betas=args.adam_betas,
         weight_decay=args.l2
     )
 
@@ -245,18 +245,18 @@ def setup_training_components(args: argparse.Namespace, model: CLaRa, train_data
 
     # Prepare models with strategy
     model, optimizer, scheduler = strategy.prepare((model, optimizer, scheduler))
-    
+
     return model, optimizer, scheduler, num_update_steps_per_epoch
 
 
-def load_checkpoint_if_exists(args: argparse.Namespace, strategy, model: CLaRa) -> int:
+def load_checkpoint_if_exists(args: argparse.Namespace, strategy, model: CoMem) -> int:
     """Load checkpoint if it exists and return consumed samples."""
     consumed_samples = 0
     if args.load_checkpoint and os.path.exists(args.ckpt_path):
         _, states = strategy.load_ckpt(model, args.ckpt_path)
         consumed_samples = states.get("consumed_samples", 0)
         strategy.print(f"Loaded checkpoint: {args.ckpt_path}, consumed_samples: {consumed_samples}")
-    
+
     return consumed_samples
 
 
@@ -265,16 +265,16 @@ def train(args: argparse.Namespace):
     # Configure strategy
     strategy = get_strategy(args)
     strategy.setup_distributed()
-    
+
     # Setup model
     model = setup_model(args)
-    
+
     # Configure tokenizer
     tokenizer = get_tokenizer(
-        args.pretrain, 
-        model, 
-        "right", 
-        strategy, 
+        args.pretrain,
+        model,
+        "right",
+        strategy,
         use_fast=not args.disable_fast_tokenizer
     )
     strategy.print(model)
@@ -319,59 +319,59 @@ def train(args: argparse.Namespace):
 
 def create_argument_parser() -> argparse.ArgumentParser:
     """Create and configure argument parser."""
-    parser = argparse.ArgumentParser(description="CLaRa Training Script")
+    parser = argparse.ArgumentParser(description="CoMem Training Script")
 
     # Model and checkpoint arguments
     model_group = parser.add_argument_group("Model Configuration")
     model_group.add_argument("--pretrain", type=str, required=True, help="Base model path")
-    model_group.add_argument("--pretrain_checkpoint", type=str, default=None, 
-                           help="CLaRa checkpoint to continue training from")
+    model_group.add_argument("--pretrain_checkpoint", type=str, default=None,
+                           help="CoMem checkpoint to continue training from")
     model_group.add_argument("--stage", type=str, default="stage1", choices=["stage1", "stage1_2"],
                            help="Training stage")
     model_group.add_argument("--generation_top_k", type=int, default=1, help="Top-k for generation")
-    model_group.add_argument("--pure_inference", action="store_true", default=False, 
+    model_group.add_argument("--pure_inference", action="store_true", default=False,
                            help="Pure inference mode")
 
-    # CLaRa specific arguments
-    clara_group = parser.add_argument_group("CLaRa Configuration")
-    clara_group.add_argument("--doc_max_length", type=int, default=256, help="Max document length")
-    clara_group.add_argument("--compress_rate", type=int, default=32, help="Document compression rate")
-    clara_group.add_argument("--qa_loss", action="store_true", default=True, 
+    # CoMem specific arguments
+    comem_group = parser.add_argument_group("CoMem Configuration")
+    comem_group.add_argument("--doc_max_length", type=int, default=256, help="Max document length")
+    comem_group.add_argument("--compress_rate", type=int, default=32, help="Document compression rate")
+    comem_group.add_argument("--qa_loss", action="store_true", default=True,
                             help="Use QA loss for joint training")
-    clara_group.add_argument("--mse_loss", action="store_true", default=False, 
+    comem_group.add_argument("--mse_loss", action="store_true", default=False,
                             help="Add MSE loss during compression training")
-    clara_group.add_argument("--do_eval_gen", action="store_true", default=False, 
+    comem_group.add_argument("--do_eval_gen", action="store_true", default=False,
                             help="Evaluate generation during eval")
-    clara_group.add_argument("--simcse_loss", action="store_true", default=False, 
+    comem_group.add_argument("--simcse_loss", action="store_true", default=False,
                             help="Evaluate generation during eval") # add
-    clara_group.add_argument("--use_mean_pool", action="store_true", default=False,
+    comem_group.add_argument("--use_mean_pool", action="store_true", default=False,
                             help="Use mean pooling for stage1 training")
-    clara_group.add_argument("--use_proj_head", action="store_true", default=False,
+    comem_group.add_argument("--use_proj_head", action="store_true", default=False,
                             help="Apply a token-wise MLP projection to mem "
                                  "tokens before mean pooling (input/output dim = hidden_size)")
-    clara_group.add_argument("--proj_hidden_ratio", type=int, default=1,
+    comem_group.add_argument("--proj_hidden_ratio", type=int, default=1,
                             help="Projection head intermediate dim = hidden_size * ratio")
-    clara_group.add_argument("--use_query_relevance_bias", action="store_true", default=False,
+    comem_group.add_argument("--use_query_relevance_bias", action="store_true", default=False,
                             help="Inject query relevance bias into FlexAttention score_mod "
                                  "during encoder compression (explicit guidance)")
-    clara_group.add_argument("--relevance_bias_scale", type=float, default=1.0,
+    comem_group.add_argument("--relevance_bias_scale", type=float, default=1.0,
                             help="Scaling factor for the query relevance bias")
-    clara_group.add_argument("--simcse_in_batch", action="store_true", default=False,
+    comem_group.add_argument("--simcse_in_batch", action="store_true", default=False,
                             help="Use in-batch SimCSE contrastive loss (mem vs query) "
                                  "with ContrastSFTDataset and "
                                  "grouped sampling across GPUs.")
-    clara_group.add_argument("--contrast_num_questions", type=int, default=8,
+    comem_group.add_argument("--contrast_num_questions", type=int, default=8,
                             help="Number of questions per context in contrastive dataset")
-    clara_group.add_argument("--simcse_weight", type=float, default=1.0,
+    comem_group.add_argument("--simcse_weight", type=float, default=1.0,
                             help="Weight for SimCSE contrastive loss. Only effective "
                                  "when --simcse_loss is enabled.")
-    clara_group.add_argument("--ortho_loss_weight", type=float, default=0.0,
+    comem_group.add_argument("--ortho_loss_weight", type=float, default=0.0,
                             help="Weight for orthogonality regularization on compressed "
                                  "mem tokens. Encourages each mem token to capture "
                                  "distinct information. Set > 0 to enable (e.g. 0.1).")
-    clara_group.add_argument("--train_encoder_adapter", type=str2bool, default=True,
+    comem_group.add_argument("--train_encoder_adapter", type=str2bool, default=True,
                             help="Whether encoder_adapter LoRA parameters are trainable")
-    clara_group.add_argument("--train_decoder_adapter", type=str2bool, default=True,
+    comem_group.add_argument("--train_decoder_adapter", type=str2bool, default=True,
                             help="Whether decoder_adapter LoRA parameters are trainable")
 
 
@@ -379,13 +379,13 @@ def create_argument_parser() -> argparse.ArgumentParser:
     checkpoint_group = parser.add_argument_group("Checkpointing")
     checkpoint_group.add_argument("--save_path", type=str, default="./ckpt", help="Model save path")
     checkpoint_group.add_argument("--save_steps", type=int, default=-1, help="Save every N steps")
-    checkpoint_group.add_argument("--save_hf_ckpt", action="store_true", default=False, 
+    checkpoint_group.add_argument("--save_hf_ckpt", action="store_true", default=False,
                                 help="Save HuggingFace checkpoint")
-    checkpoint_group.add_argument("--disable_ds_ckpt", action="store_true", default=False, 
+    checkpoint_group.add_argument("--disable_ds_ckpt", action="store_true", default=False,
                                 help="Disable DeepSpeed checkpoint")
-    checkpoint_group.add_argument("--ckpt_path", type=str, default="./ckpt/checkpoints_sft", 
+    checkpoint_group.add_argument("--ckpt_path", type=str, default="./ckpt/checkpoints_sft",
                                 help="Checkpoint path to load")
-    checkpoint_group.add_argument("--load_checkpoint", action="store_true", default=False, 
+    checkpoint_group.add_argument("--load_checkpoint", action="store_true", default=False,
                                 help="Load from checkpoint")
     checkpoint_group.add_argument("--max_ckpt_num", type=int, default=2, help="Max checkpoint number")
     checkpoint_group.add_argument("--max_ckpt_mem", type=int, default=1e8, help="Max checkpoint memory")
@@ -395,39 +395,39 @@ def create_argument_parser() -> argparse.ArgumentParser:
     training_group.add_argument("--max_epochs", type=int, default=2, help="Maximum training epochs")
     training_group.add_argument("--learning_rate", type=float, default=5e-6, help="Learning rate")
     training_group.add_argument("--lr_warmup_ratio", type=float, default=0.03, help="Warmup ratio")
-    training_group.add_argument("--lr_scheduler", type=str, default="cosine_with_min_lr", 
+    training_group.add_argument("--lr_scheduler", type=str, default="cosine_with_min_lr",
                               help="Learning rate scheduler")
     training_group.add_argument("--l2", type=float, default=0, help="Weight decay")
-    training_group.add_argument("--adam_betas", type=float, nargs=2, default=(0.9, 0.95), 
+    training_group.add_argument("--adam_betas", type=float, nargs=2, default=(0.9, 0.95),
                               help="Adam optimizer betas")
     training_group.add_argument("--max_norm", type=float, default=1.0, help="Gradient clipping")
-    training_group.add_argument("--pretrain_mode", action="store_true", default=False, 
+    training_group.add_argument("--pretrain_mode", action="store_true", default=False,
                               help="Use pretrain loss")
 
     # DeepSpeed and distributed training
     distributed_group = parser.add_argument_group("Distributed Training")
-    distributed_group.add_argument("--micro_train_batch_size", type=int, default=8, 
+    distributed_group.add_argument("--micro_train_batch_size", type=int, default=8,
                                  help="Batch size per GPU")
-    distributed_group.add_argument("--train_batch_size", type=int, default=128, 
+    distributed_group.add_argument("--train_batch_size", type=int, default=128,
                                  help="Global training batch size")
-    distributed_group.add_argument("--local_rank", type=int, default=-1, 
+    distributed_group.add_argument("--local_rank", type=int, default=-1,
                                  help="Local rank for DeepSpeed")
     distributed_group.add_argument("--zero_stage", type=int, default=2, help="DeepSpeed ZeRO stage")
     distributed_group.add_argument("--bf16", action="store_true", default=False, help="Enable bfloat16")
-    distributed_group.add_argument("--gradient_checkpointing", action="store_true", default=False, 
+    distributed_group.add_argument("--gradient_checkpointing", action="store_true", default=False,
                                  help="Enable gradient checkpointing")
-    distributed_group.add_argument("--flash_attn", action="store_true", default=False, 
+    distributed_group.add_argument("--flash_attn", action="store_true", default=False,
                                  help="Enable FlashAttention2")
     distributed_group.add_argument("--ds_tensor_parallel_size", type=int, default=1, help="DeepSpeed Tensor parallel size")
     # Dataset configuration
     dataset_group = parser.add_argument_group("Dataset Configuration")
     dataset_group.add_argument("--dataset", type=str, required=True, help="Training dataset path")
-    dataset_group.add_argument("--dataset_probs", type=str, default=None, 
+    dataset_group.add_argument("--dataset_probs", type=str, default=None,
                              help="Dataset sampling probabilities")
     dataset_group.add_argument("--eval_dataset", type=str, default=None, help="Evaluation dataset path")
     dataset_group.add_argument("--dataset_split", type=str, default="train", help="Dataset split")
     dataset_group.add_argument("--eval_split", type=str, default="train", help="Evaluation split")
-    dataset_group.add_argument("--max_samples", type=int, default=1000000, 
+    dataset_group.add_argument("--max_samples", type=int, default=1000000,
                              help="Maximum samples to use")
     dataset_group.add_argument("--max_len", type=int, default=2048, help="Maximum sequence length")
     # Logging and monitoring
@@ -438,10 +438,10 @@ def create_argument_parser() -> argparse.ArgumentParser:
     logging_group.add_argument("--wandb_org", type=str, default=None, help="Wandb organization")
     logging_group.add_argument("--wandb_group", type=str, default=None, help="Wandb group")
     logging_group.add_argument("--wandb_project", type=str, default=None, help="Wandb project")
-    logging_group.add_argument("--wandb_run_name", type=str, 
-                             default="clara_%s" % datetime.now().strftime("%m%dT%H:%M"),
+    logging_group.add_argument("--wandb_run_name", type=str,
+                             default="comem_%s" % datetime.now().strftime("%m%dT%H:%M"),
                              help="Wandb run name")
-    logging_group.add_argument("--use_tensorboard", type=str, default="/dev/shm/lzh_logs", 
+    logging_group.add_argument("--use_tensorboard", type=str, default="/dev/shm/lzh_logs",
                              help="TensorBoard logging path")
 
     # Additional arguments
@@ -449,8 +449,8 @@ def create_argument_parser() -> argparse.ArgumentParser:
     misc_group.add_argument("--seed", type=int, default=42, help="Random seed")
     misc_group.add_argument("--disable_fast_tokenizer", action="store_true", default=False,
                           help="Disable fast tokenizer")
-    misc_group.add_argument("--use_ms", action="store_true", default=False, 
-                          help="Use ModelScope") 
+    misc_group.add_argument("--use_ms", action="store_true", default=False,
+                          help="Use ModelScope")
 
     return parser
 
@@ -460,22 +460,22 @@ def validate_arguments(args: argparse.Namespace):
     # Validate training stage
     if args.stage not in ["stage1", "stage1_2"]:
         raise ValueError(f"Invalid stage: {args.stage}")
-    
+
     # Validate compression parameters
     if args.compress_rate <= 0:
         raise ValueError("Compression rate must be positive")
-    
+
     if args.doc_max_length <= 0:
         raise ValueError("Document max length must be positive")
-    
+
     if args.doc_max_length % args.compress_rate != 0:
         print(f"Warning: doc_max_length ({args.doc_max_length}) is not divisible by "
               f"compress_rate ({args.compress_rate})")
-    
+
     # Validate paths
     if args.dataset and not os.path.exists(args.dataset):
         print(f"Warning: Dataset path does not exist: {args.dataset}")
-    
+
     if args.pretrain_checkpoint and not os.path.exists(args.pretrain_checkpoint):
         raise ValueError(f"Pretrain checkpoint path does not exist: {args.pretrain_checkpoint}")
 
@@ -484,13 +484,13 @@ def main():
     """Main entry point."""
     parser = create_argument_parser()
     args = parser.parse_args()
-    
+
     # Validate arguments
     validate_arguments(args)
-    
+
     # Print configuration
     print("=" * 60)
-    print("CLaRa Training Configuration")
+    print("CoMem Training Configuration")
     print("=" * 60)
     print(f"Training stage: {args.stage}")
     print(f"Base model: {args.pretrain}")
@@ -504,7 +504,7 @@ def main():
     print(f"Learning rate: {args.learning_rate}")
     print(f"Batch size (micro/global): {args.micro_train_batch_size}/{args.train_batch_size}")
     print("=" * 60)
-    
+
     # Start training
     train(args)
     print("Training completed successfully!")

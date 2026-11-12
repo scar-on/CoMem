@@ -224,7 +224,7 @@ def main():
 
                 for item, ans in zip(batch, answers):
                     result_item = item["original_data"].copy()
-                    result_item["CLaRa_normal_output"] = ans
+                    result_item["CoMem_normal_output"] = ans
                     result_item["global_index"] = item["global_index"]
                     all_results.append(result_item)
 

@@ -19,7 +19,7 @@ mem_tsne/out_stage2/
 mem_context_tsne/out/
 evaluation/evaluation_data/
 ruler/data/
-ruler/predictions-clara-ruler/
+ruler/predictions-*-ruler/
 ruler/contrast_method/ruler/results/
 *.npy
 *.npz

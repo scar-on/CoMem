@@ -5,9 +5,9 @@
 #
 
 """
-CLaRa Dataset and Collate Functions
+CoMem Dataset and Collate Functions
 
-This module provides dataset handling and batch collation for CLaRa training.
+This module provides dataset handling and batch collation for CoMem training.
 """
 
 import torch
@@ -34,12 +34,12 @@ def _pad_to_block_multiple(input_ids: torch.Tensor, attention_mask: torch.Tensor
     return input_ids, attention_mask
 
 
-def make_collate_fn(clara_model, enc_max_len: int = 256, dec_max_len: int = 1024, qa_loss: bool = False):
+def make_collate_fn(comem_model, enc_max_len: int = 256, dec_max_len: int = 1024, qa_loss: bool = False):
     """
-    Create a collate function for CLaRa training.
+    Create a collate function for CoMem training.
     
     Args:
-        clara_model: CLaRa model instance
+        comem_model: CoMem model instance
         enc_max_len: Maximum encoder sequence length
         dec_max_len: Maximum decoder sequence length
         qa_loss: Whether to use QA loss for joint training
@@ -47,8 +47,8 @@ def make_collate_fn(clara_model, enc_max_len: int = 256, dec_max_len: int = 1024
     Returns:
         Collate function that processes batches for training
     """
-    tokenizer = clara_model.decoder_tokenizer
-    generation_top_k = clara_model.generation_top_k
+    tokenizer = comem_model.decoder_tokenizer
+    generation_top_k = comem_model.generation_top_k
     
     def _mask_prompt(labels: torch.Tensor, 
                      attention_mask: torch.Tensor, 
@@ -106,7 +106,7 @@ def make_collate_fn(clara_model, enc_max_len: int = 256, dec_max_len: int = 1024
                 flat_questions.append(query)
         #################################
         # Prepare encoder inputs
-        enc_inputs = clara_model._prepare_encoder_inputs(flat_docs, max_length=enc_max_len, q_texts=flat_questions) # 传入query
+        enc_inputs = comem_model._prepare_encoder_inputs(flat_docs, max_length=enc_max_len, q_texts=flat_questions) # 传入query
         enc_input_ids = enc_inputs["input_ids"]
         enc_attention_mask = enc_inputs["attention_mask"]
         
@@ -118,14 +118,14 @@ def make_collate_fn(clara_model, enc_max_len: int = 256, dec_max_len: int = 1024
             if data_type == "paraphrase":
                 # Handle paraphrase data (answer is a list)
                 prompt_responses.append(
-                    clara_model._blend_prompt_and_memory_tokens(
-                        query=q, answer=a[0], paraphrase_loss=True, stage=clara_model.training_stage
+                    comem_model._blend_prompt_and_memory_tokens(
+                        query=q, answer=a[0], paraphrase_loss=True, stage=comem_model.training_stage
                     )
                 )
             else:
                 prompt_responses.append(
-                    clara_model._blend_prompt_and_memory_tokens(
-                        query=q, answer=a, qa_loss=qa_loss, stage=clara_model.training_stage
+                    comem_model._blend_prompt_and_memory_tokens(
+                        query=q, answer=a, qa_loss=qa_loss, stage=comem_model.training_stage
                     )
                 )
         
@@ -155,7 +155,7 @@ def make_collate_fn(clara_model, enc_max_len: int = 256, dec_max_len: int = 1024
         labels = _mask_prompt(labels, dec_attention_mask, prompt_lengths, -100)
         
         return {
-            "stage": clara_model.training_stage,
+            "stage": comem_model.training_stage,
             "enc_input_ids": enc_input_ids,
             "enc_attention_mask": enc_attention_mask,
             "dec_input_ids": dec_input_ids,
@@ -185,10 +185,10 @@ def make_collate_fn(clara_model, enc_max_len: int = 256, dec_max_len: int = 1024
         batch_data = (docs_list, questions, answers, data_types, pos_indices)
         
         # Route to appropriate processor
-        if clara_model.training_stage in ["stage1", "stage1_2"]:
+        if comem_model.training_stage in ["stage1", "stage1_2"]:
             return _process_stage1_batch(batch_data)
         else:
-            raise ValueError(f"Unsupported training stage for this build: {clara_model.training_stage}")
+            raise ValueError(f"Unsupported training stage for this build: {comem_model.training_stage}")
     
     return collate
 
@@ -200,7 +200,7 @@ def preprocess_data(data: Dict[str, Any],
                    apply_chat_template: Optional[Callable] = None,
                    multiturn: bool = False) -> Tuple[List[str], str, str, str, List[int]]:
     """
-    Preprocess raw data into format expected by CLaRa dataset.
+    Preprocess raw data into format expected by CoMem dataset.
     
     Args:
         data: Raw data dictionary
@@ -214,7 +214,7 @@ def preprocess_data(data: Dict[str, Any],
         Tuple of (docs, question, answer, data_type, pos_index)
     """
     # Extract documents. MRQA plain_text stores one context as a string,
-    # while CLaRa expects a list of documents for generation_top_k.
+    # while CoMem expects a list of documents for generation_top_k.
     if "docs" in data and isinstance(data['docs'], list):
         docs = data['docs']
     elif "context" in data and isinstance(data['context'], list):
@@ -254,9 +254,9 @@ def preprocess_data(data: Dict[str, Any],
 
 class SFTDataset(Dataset):
     """
-    Dataset for CLaRa Supervised Fine-Tuning.
+    Dataset for CoMem Supervised Fine-Tuning.
     
-    This dataset handles data preprocessing and loading for different CLaRa training stages.
+    This dataset handles data preprocessing and loading for different CoMem training stages.
     """
     
     def __init__(self,

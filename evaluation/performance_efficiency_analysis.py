@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Benchmark CLaRa compression ratios and draw a performance-efficiency figure."""
+"""Benchmark CoMem compression ratios and draw a performance-efficiency figure."""
 
 import argparse
 import gc
@@ -38,18 +38,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from openrlhf.models.modeling_clara import CLaRa  # noqa: E402
+from openrlhf.models.modeling_comem import CoMem  # noqa: E402
 
 
-DEFAULT_MODELS = {
-    4: "/user/zhangsikui/a_qcc/save_dir/stage2_clara_inst_simcse_0.01_cr4",
-    8: "/user/zhangsikui/a_qcc/save_dir/stage2_clara_inst_simcse_0.01_cr8",
-    16: "/user/zhangsikui/a_qcc/save_dir/stage2_clara_inst_simcse_0.01_cr16",
-    32: "/user/zhangsikui/a_qcc/save_dir/stage2_clara_inst_lr1e-4",
-    64: "/user/zhangsikui/a_qcc/save_dir/stage2_clara_inst_simcse_0.01_cr64",
-}
 DEFAULT_DATASETS = ("nq",)
-OUTPUT_FIELD = "CLaRa_normal_output"
+OUTPUT_FIELD = "CoMem_normal_output"
 SYSTEM_PROMPT = (
     "You are a helpful assistant. Your task is to extract relevant "
     "information from provided documents and to answer to questions."
@@ -58,12 +51,12 @@ SYSTEM_PROMPT = (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run batched CLaRa inference across compression ratios and plot accuracy vs efficiency."
+        description="Run batched CoMem inference across compression ratios and plot accuracy vs efficiency."
     )
     parser.add_argument("--gpu", default="2", help="Visible CUDA device id. Default: 2")
     parser.add_argument("--datasets", default=",".join(DEFAULT_DATASETS), help="Benchmark source dataset. Default: nq only.")
-    parser.add_argument("--models", default=None, help="Comma-separated CR=path entries. Default: built-in CR4/8/16/32/64.")
-    parser.add_argument("--output_dir", default="/user/zhangsikui/a_qcc/save_dir/performance_efficiency_analysis")
+    parser.add_argument("--models", default=None, help="Comma-separated CR=checkpoint_path entries")
+    parser.add_argument("--output_dir", default=str(REPO_ROOT / "save_dir" / "performance_efficiency_analysis"))
     parser.add_argument(
         "--max_samples_per_dataset",
         type=int,
@@ -77,7 +70,7 @@ def parse_args() -> argparse.Namespace:
         "--attn_implementation",
         default="flash_attention_2",
         choices=["flash_attention_2", "sdpa", "eager"],
-        help="Attention backend for both CLaRa and baseline. Default: flash_attention_2.",
+        help="Attention backend for both CoMem and baseline. Default: flash_attention_2.",
     )
     parser.add_argument("--warmup_batches", type=int, default=3)
     parser.add_argument("--repeat_runs", type=int, default=5, help="Repeat the same selected samples for stable timing.")
@@ -86,17 +79,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no_gold_retrieval", action="store_true")
     parser.add_argument("--save_predictions", action="store_true")
     parser.add_argument("--include_baseline", action="store_true", help="Benchmark and draw the direct-decoder baseline.")
-    parser.add_argument("--baseline_only", action="store_true", help="Only benchmark baseline, then plot with existing CLaRa summary.")
+    parser.add_argument("--baseline_only", action="store_true", help="Only benchmark baseline, then plot with existing CoMem summary.")
     parser.add_argument(
         "--baseline_model_path",
-        default="/user/zhangsikui/a_qcc/data/model/Qwen_Qwen3-4B-Instruct-2507",
+        default=os.environ.get("BASELINE_MODEL_PATH", "Qwen/Qwen3-4B-Instruct-2507"),
     )
     return parser.parse_args()
 
 
 def parse_models(models_arg: str | None) -> Dict[int, str]:
     if not models_arg:
-        return dict(DEFAULT_MODELS)
+        return {}
 
     parsed = {}
     for entry in models_arg.split(","):
@@ -193,8 +186,8 @@ def set_attention_backend(model, attn_implementation: str) -> None:
         model.config.attn_implementation = attn_implementation
 
 
-def load_model(model_path: str, generation_top_k: int, attn_implementation: str) -> CLaRa:
-    model = CLaRa.from_pretrained(
+def load_model(model_path: str, generation_top_k: int, attn_implementation: str) -> CoMem:
+    model = CoMem.from_pretrained(
         model_path,
         training_stage="stage1_2",
         generation_top_k=generation_top_k,
@@ -256,7 +249,7 @@ def load_baseline_model(model_path: str, attn_implementation: str):
 
 
 def causal_compress_documents(
-    model: CLaRa,
+    model: CoMem,
     enc_input_ids: torch.Tensor,
     enc_attention_mask: torch.Tensor,
 ) -> torch.Tensor:
@@ -359,7 +352,7 @@ def benchmark_baseline(rows: List[Dict], args: argparse.Namespace) -> Dict:
 
 @torch.no_grad()
 def generate_batch(
-    model: CLaRa,
+    model: CoMem,
     batch: List[Dict],
     max_new_tokens: int,
     use_general_query: bool,
@@ -436,7 +429,7 @@ def iter_batches(rows: List[Dict], batch_size: int) -> Iterable[List[Dict]]:
         yield rows[start : start + batch_size]
 
 
-def warmup_model(model: CLaRa, rows: List[Dict], args: argparse.Namespace) -> None:
+def warmup_model(model: CoMem, rows: List[Dict], args: argparse.Namespace) -> None:
     if args.warmup_batches <= 0 or not rows:
         return
     warmup_rows = rows[: args.batch_size * args.warmup_batches]
@@ -447,7 +440,7 @@ def warmup_model(model: CLaRa, rows: List[Dict], args: argparse.Namespace) -> No
 
 
 def evaluate_dataset(
-    model: CLaRa,
+    model: CoMem,
     cr: int,
     dataset: str,
     rows: List[Dict],
@@ -572,7 +565,7 @@ def plot_summary(records: List[Dict], output_dir: Path) -> None:
 
     ax.set_xlabel("Efficiency (samples / second)")
     ax.set_ylabel("Performance (average accuracy)")
-    ax.set_title("CLaRa Performance-Efficiency Trade-off")
+    ax.set_title("CoMem Performance-Efficiency Trade-off")
     cbar = fig.colorbar(scatter, ax=ax)
     cbar.set_label("Compression ratio")
     fig.tight_layout()
@@ -582,7 +575,7 @@ def plot_summary(records: List[Dict], output_dir: Path) -> None:
 
 
 def plot_efficiency_only(records: List[Dict], output_dir: Path, baseline: Dict | None = None) -> None:
-    clara_records = sorted(records, key=lambda row: row["compression_ratio"])
+    comem_records = sorted(records, key=lambda row: row["compression_ratio"])
     labels = []
     speeds = []
     colors = []
@@ -592,7 +585,7 @@ def plot_efficiency_only(records: List[Dict], output_dir: Path, baseline: Dict |
         speeds.append(baseline["samples_per_second"])
         colors.append("#7f7f7f")
 
-    for row in clara_records:
+    for row in comem_records:
         labels.append(f"CR{row['compression_ratio']}")
         speeds.append(row["samples_per_second"])
         colors.append("#4C78A8")
@@ -639,6 +632,8 @@ def main() -> None:
 
     datasets = [name.strip() for name in args.datasets.split(",") if name.strip()]
     model_paths = parse_models(args.models)
+    if not args.baseline_only and not model_paths:
+        raise SystemExit("Provide --models CR=checkpoint_path,... for CoMem benchmarking.")
     gold_retrieval = not args.no_gold_retrieval
     print(f"CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')}")
     sample_limit = args.max_samples_per_dataset or args.batch_size

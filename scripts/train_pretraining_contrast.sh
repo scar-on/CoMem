@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# SimCSE in-batch contrastive pretraining for CLaRa.
+# SimCSE in-batch contrastive pretraining for CoMem.
 #
 # Each context has 8 different questions.  micro_train_batch_size=2 on 4 GPUs
 # yields a global micro-batch of 8 samples – exactly one context group.
@@ -81,7 +81,7 @@ training_commands="openrlhf.cli.train_sft \
 DISTRIBUTED_ARGS="--nproc_per_node ${NUM_LOCAL_GPUS} --nnodes ${NUM_NODES} --rdzv_id 101 --rdzv_backend c10d --rdzv_endpoint ${MASTER}:${MASTER_PORT} --master_addr ${MASTER} --master_port ${MASTER_PORT} --node_rank ${NODE_RANK}"
 
 # Run training
-echo "Starting CLaRa SimCSE contrastive training on node $NODE_RANK of $NUM_NODES nodes..."
+echo "Starting CoMem SimCSE contrastive training on node $NODE_RANK of $NUM_NODES nodes..."
 if [ $DEBUG -eq 0 ]; then
     if [ $NUM_NODES -gt 1 ]; then
         if command -v fi_info >/dev/null 2>&1; then
@@ -99,4 +99,4 @@ else
     -m $training_commands
 fi
 
-echo "CLaRa SimCSE contrastive training completed successfully!"
+echo "CoMem SimCSE contrastive training completed successfully!"

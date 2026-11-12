@@ -19,14 +19,14 @@ DEBUG=${DEBUG:-0}
 
 export WANDB_DIR="${WANDB_DIR:-${SAVE_ROOT}/wandb_logs}"
 
-# Configuration #/data/project/scar/CLaRa_pretraining/
+# Configuration #/data/project/scar/CoMem_pretraining/
 data_path="${DATA_PATH:-${DATA_ROOT}/pretraining}"
 SAVE_MODEL_NAME="${SAVE_MODEL_NAME:-base_new_mem_bidirectional}"
 SAVE_PATH="${SAVE_ROOT}/${SAVE_MODEL_NAME}"
 MODEL_PATH="${MODEL_PATH:-${BASE_MODEL}}"
 
 mkdir -p $SAVE_PATH
-# cp -r /mnt/conductor_data/code/clara_project/clara_training $SAVE_PATH/
+# cp -r /mnt/conductor_data/code/comem_project/comem_training $SAVE_PATH/
 
 # Extract distributed parameters dynamically
 NCCL_DEBUG=INFO
@@ -87,7 +87,7 @@ training_commands="openrlhf.cli.train_sft \
 DISTRIBUTED_ARGS="--nproc_per_node ${NUM_LOCAL_GPUS} --nnodes ${NUM_NODES} --rdzv_id 101 --rdzv_backend c10d --rdzv_endpoint ${MASTER}:${MASTER_PORT} --master_addr ${MASTER} --master_port ${MASTER_PORT} --node_rank ${NODE_RANK}"
 
 # Run training with torchrun for multinode
-echo "Starting CLaRa training on node $NODE_RANK of $NUM_NODES nodes..."
+echo "Starting CoMem training on node $NODE_RANK of $NUM_NODES nodes..."
 if [ $DEBUG -eq 0 ]; then
     if [ $NUM_NODES -gt 1 ]; then
         # For multinode, check if EFA is available
@@ -111,7 +111,7 @@ fi
 
 
 
-echo "CLaRa training completed successfully!"
+echo "CoMem training completed successfully!"
 
 
 bash scripts/evaluation_end_to_end.sh

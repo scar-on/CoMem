@@ -20,7 +20,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from openrlhf.models.modeling_clara import CLaRa
+from openrlhf.models.modeling_comem import CoMem
 
 
 os.environ["NCCL_TIMEOUT"] = "5400"
@@ -87,13 +87,13 @@ def exact_match_score(prediction: str, ground_truth: str) -> bool:
     return normalize_answer(prediction) == normalize_answer(ground_truth)
 
 
-def build_raw_context_prompt(model: CLaRa, question: str, docs: List[str]) -> str:
-    """Build the same QA prompt style as CLaRa, but with raw document text."""
+def build_raw_context_prompt(model: CoMem, question: str, docs: List[str]) -> str:
+    """Build the same QA prompt style as CoMem, but with raw document text."""
     background = "\n\n".join(f"[Document {idx}]\n{doc}" for idx, doc in enumerate(docs, start=1))
     return model._blend_standard_prompt(docs=background, query=question, answer=None)
 
 
-def adapter_context(model: CLaRa, adapter_mode: str):
+def adapter_context(model: CoMem, adapter_mode: str):
     """Choose which LoRA adapter mode to use for raw-context decoding."""
     if adapter_mode == "none":
         if hasattr(model.decoder, "disable_adapter"):
@@ -124,9 +124,9 @@ def run_direct_eval(args: argparse.Namespace) -> Dict:
     accelerator = Accelerator(kwargs_handlers=[process_group_kwargs])
 
     if accelerator.is_main_process:
-        print("Loading CLaRa model...")
+        print("Loading CoMem model...")
 
-    model = CLaRa.from_pretrained(
+    model = CoMem.from_pretrained(
         args.model_path,
         training_stage=args.stage,
         generation_top_k=5,
@@ -182,7 +182,7 @@ def run_direct_eval(args: argparse.Namespace) -> Dict:
         "mode": "raw_context_no_compression",
         "question": question,
         "docs": docs,
-        "CLaRa_normal_output": prediction,
+        "CoMem_normal_output": prediction,
         "prompt_tokens": input_ids.size(1),
         "adapter_mode": args.adapter_mode,
     }
@@ -233,7 +233,7 @@ def main() -> None:
     result = run_direct_eval(args)
 
     print("\nPrediction:")
-    print(result["CLaRa_normal_output"])
+    print(result["CoMem_normal_output"])
 
     if "metrics" in result:
         print("\nMetrics:")

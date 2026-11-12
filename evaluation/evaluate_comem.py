@@ -25,7 +25,7 @@ import evaluate
 import re
 import string
 
-from openrlhf.models.modeling_clara import CLaRa
+from openrlhf.models.modeling_comem import CoMem
 
 # Environment setup
 os.environ["NCCL_TIMEOUT"] = "5400"
@@ -191,7 +191,7 @@ class ResultCalculator:
         answer_key = "golden_answers" if "golden_answers" in result_list[0] else "answer"
         
         for result in result_list:
-            prediction = result['CLaRa_normal_output']
+            prediction = result['CoMem_normal_output']
             ground_truth = result[answer_key][0] if answer_key == "golden_answers" else result[answer_key]
             
             acc_total += self.metrics.cover_exact_match_score(prediction, ground_truth)
@@ -238,7 +238,7 @@ class ResultCalculator:
         
         # Process seen data (first 2000)
         for result in result_list[:2000]:
-            prediction = result['CLaRa_normal_output']
+            prediction = result['CoMem_normal_output']
             ground_truth = result['doc']
             
             bs = self.metrics.bertscore.compute(predictions=[prediction], references=[ground_truth], lang="en")
@@ -252,7 +252,7 @@ class ResultCalculator:
         
         # Process unseen data (after 2000)
         for result in result_list[2000:]:
-            prediction = result['CLaRa_normal_output']
+            prediction = result['CoMem_normal_output']
             ground_truth = result['doc']
             
             bs = self.metrics.bertscore.compute(predictions=[prediction], references=[ground_truth], lang="en")
@@ -297,8 +297,8 @@ class ResultCalculator:
         non_mem_reps = []
         
         for result in result_list:
-            mem_rep = result['CLaRa_compressed_output']
-            non_mem_rep = result['CLaRa_normal_output']
+            mem_rep = result['CoMem_compressed_output']
+            non_mem_rep = result['CoMem_normal_output']
             
             if isinstance(mem_rep, torch.Tensor):
                 mem_rep = mem_rep.float().cpu().numpy()
@@ -493,7 +493,7 @@ class DataLoader:
         return processed_data
 
 
-class AcceleratedCLaRaInference:
+class AcceleratedCoMemInference:
     """Main inference engine using Accelerate for distributed processing."""
     
     def __init__(self, model_path: str, training_stage: str = None, 
@@ -507,10 +507,10 @@ class AcceleratedCLaRaInference:
         if self.accelerator.is_main_process:
             print(f"Using {self.accelerator.num_processes} GPUs for distributed inference")
             print(f"Current process: {self.accelerator.process_index}")
-            print("Loading CLaRa model...")
+            print("Loading CoMem model...")
         
         # Load model
-        self.model = CLaRa.from_pretrained(
+        self.model = CoMem.from_pretrained(
             model_path, 
             training_stage=training_stage, 
             generation_top_k=generation_top_k, 
@@ -677,7 +677,7 @@ def convert_embeddings_to_list(data):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="CLaRa Model Inference")
+    parser = argparse.ArgumentParser(description="CoMem Model Inference")
     parser.add_argument('--model_path', type=str, required=True, help='Path to model checkpoint')
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size per GPU')
     parser.add_argument('--stage', type=str, default='stage1', 
@@ -721,7 +721,7 @@ def main():
         model_path = os.path.join('/mnt/task_wrapper/user_output/artifacts/data/train_checkpoint', args.model_path)
         args.model_path = model_path
         
-        inference_engine = AcceleratedCLaRaInference(
+        inference_engine = AcceleratedCoMemInference(
             model_path=model_path,
             training_stage=args.stage,
             generation_top_k=args.generation_top_k,
@@ -793,8 +793,8 @@ def main():
                 batch_results = []
                 for i, (item, normal_out, compressed_out) in enumerate(zip(batch, batch_out_normal, batch_out_compressed)):
                     result_item = item['original_data'].copy()
-                    result_item['CLaRa_normal_output'] = normal_out
-                    result_item['CLaRa_compressed_output'] = compressed_out
+                    result_item['CoMem_normal_output'] = normal_out
+                    result_item['CoMem_compressed_output'] = compressed_out
                     result_item['global_index'] = item['global_index']
                     
                     if args.stage == 'stage2' and batch_topk_idx is not None:
