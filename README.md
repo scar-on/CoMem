@@ -24,8 +24,10 @@ model = CoMem.from_pretrained(
 ```
 
 Mistral checkpoints are available at compression rates 4, 8, 16, 64, and 128
-for both training stages. The Qwen3-4B checkpoint is available at rate 32 in
-`ssxada/CoMem-Qwen3-4B`.
+for both training stages in
+[CoMem-Mistral-7B](https://huggingface.co/ssxada/CoMem-Mistral-7B). The Qwen3-4B
+checkpoint is available at rate 32 in
+[CoMem-Qwen3-4B](https://huggingface.co/ssxada/CoMem-Qwen3-4B).
 
 ## Setup
 
