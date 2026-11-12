@@ -1,6 +1,6 @@
 ---
 license: other
-license_name: CoMem mixed-source terms
+license_name: comem-mixed-source-terms
 license_link: https://github.com/scar-on/CoMem/blob/master/LICENSE
 base_model: Qwen/Qwen3-4B-Instruct-2507
 ---
